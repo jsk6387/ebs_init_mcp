@@ -15,11 +15,17 @@ A Model Context Protocol (MCP) server for automating AWS EBS volume initializati
 ### Using uvx (Recommended)
 
 ```bash
-# Run directly without installation
-uvx ebs-init-mcp
+# Run directly without installation (latest version)
+uvx ebs-initializer-mcp@latest
 
-# Or install globally
-uv tool install ebs-init-mcp
+# Or run specific version
+uvx ebs-initializer-mcp==0.4.5
+
+# Install globally
+uv tool install ebs-initializer-mcp
+
+# Upgrade to latest version
+uvx --upgrade ebs-initializer-mcp
 ```
 
 ### From GitHub
@@ -39,9 +45,9 @@ Add to your MCP configuration (`mcp_config.json`):
   "mcpServers": {
     "ebs-initializer": {
       "command": "uvx",
-      "args": ["ebs-init-mcp"],
+      "args": ["ebs-initializer-mcp@latest"],
       "env": {
-        "AWS_REGION": "us-west-2",
+        "AWS_REGION": "us-west-2"
       }
     }
   }
@@ -53,8 +59,7 @@ Add to your MCP configuration (`mcp_config.json`):
 1. **get_instance_volumes**: Get all EBS volumes attached to an instance
 2. **initialize_all_volumes**: Initialize all volumes on an instance (parallel processing)
 3. **initialize_volume_by_id**: Initialize a specific volume by its volume ID
-4. **check_initialization_status**: Monitor initialization progress
-5. **get_initialization_logs**: View detailed execution logs
+4. **check_initialization_status**: Monitor initialization progress and view detailed logs
 
 ### Example Usage with Claude Code
 
@@ -74,6 +79,12 @@ The MCP server will:
 
 - AWS CLI configured with appropriate permissions
 - EC2 instances must have Systems Manager agent installed
+- **Supported Operating Systems:**
+  - Amazon Linux 2
+  - Amazon Linux 2023
+  - Red Hat Enterprise Linux (RHEL)
+  - Ubuntu (18.04, 20.04, 22.04, 24.04)
+  - SUSE Linux Enterprise Server (SLES)
 - Required IAM permissions:
   - `ec2:DescribeVolumes`
   - `ssm:SendCommand`
@@ -115,7 +126,7 @@ export AWS_REGION=ap-northeast-2
 **Priority order:**
 1. `AWS_DEFAULT_REGION` environment variable
 2. `AWS_REGION` environment variable  
-3. Fallback to `us-west-2`
+3. Fallback to `us-east-1`
 
 ### MCP Configuration
 
@@ -124,9 +135,9 @@ export AWS_REGION=ap-northeast-2
   "mcpServers": {
     "ebs-initializer": {
       "command": "uvx",
-      "args": ["ebs-initializer-mcp"],
+      "args": ["ebs-initializer-mcp@latest"],
       "env": {
-        "AWS_DEFAULT_REGION": "ap-northeast-2",
+        "AWS_DEFAULT_REGION": "ap-northeast-2"
       }
     }
   }

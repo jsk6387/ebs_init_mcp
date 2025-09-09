@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Get default region from environment variable (evaluated at module load time)
-DEFAULT_REGION = os.getenv('AWS_DEFAULT_REGION', os.getenv('AWS_REGION', 'us-west-2'))
+DEFAULT_REGION = os.getenv('AWS_DEFAULT_REGION', os.getenv('AWS_REGION', 'us-east-1'))
 
 # Create FastMCP server instance
 mcp = FastMCP("EBS Initialization Server")
@@ -322,13 +322,27 @@ def check_initialization_status(command_id: str, instance_id: str, region: str =
             InstanceId=instance_id
         )
         
+        # Get more detailed timing information
+        start_time = None
+        try:
+            command_invocations = ssm.list_command_invocations(
+                CommandId=command_id,
+                InstanceId=instance_id,
+                Details=True
+            )
+            if command_invocations['CommandInvocations']:
+                invocation = command_invocations['CommandInvocations'][0]
+                start_time = invocation.get('RequestedDateTime')
+        except Exception as e:
+            logger.warning(f"Could not get RequestedDateTime: {e}")
+        
         result = {
             "command_id": command_id,
             "instance_id": instance_id,
             "status": response['Status'],
             "status_details": response.get('StatusDetails', ''),
-            "execution_start_time": response.get('ExecutionStartDateTime', '').strftime('%Y-%m-%d %H:%M:%S UTC') if response.get('ExecutionStartDateTime') else None,
-            "execution_end_time": response.get('ExecutionEndDateTime', '').strftime('%Y-%m-%d %H:%M:%S UTC') if response.get('ExecutionEndDateTime') else None,
+            "execution_start_time": str(start_time) if start_time else str(response.get('ExecutionStartDateTime', '')) if response.get('ExecutionStartDateTime') else None,
+            "execution_end_time": str(response.get('ExecutionEndDateTime', '')) if response.get('ExecutionEndDateTime') else None,
             "stdout_preview": response.get('StandardOutputContent', '')[:500] + ('...' if len(response.get('StandardOutputContent', '')) > 500 else ''),
             "stderr_preview": response.get('StandardErrorContent', '')[:500] + ('...' if len(response.get('StandardErrorContent', '')) > 500 else ''),
         }
@@ -352,42 +366,6 @@ def check_initialization_status(command_id: str, instance_id: str, region: str =
     except Exception as e:
         return f"❌ Failed to check status for command {command_id}: {str(e)}"
 
-
-@mcp.tool()
-def get_initialization_logs(command_id: str, instance_id: str, region: str = DEFAULT_REGION) -> str:
-    """
-    Get full logs from volume initialization.
-    
-    Args:
-        command_id: Systems Manager command ID
-        instance_id: EC2 instance ID
-        region: AWS region name (default: from AWS_DEFAULT_REGION or AWS_REGION env var, fallback to us-west-2)
-    
-    Returns:
-        JSON string with complete execution logs
-    """
-    try:
-        ssm = boto3.client('ssm', region_name=region)
-        
-        response = ssm.get_command_invocation(
-            CommandId=command_id,
-            InstanceId=instance_id
-        )
-        
-        result = {
-            "command_id": command_id,
-            "instance_id": instance_id,
-            "status": response['Status'],
-            "stdout": response.get('StandardOutputContent', ''),
-            "stderr": response.get('StandardErrorContent', ''),
-            "execution_start_time": response.get('ExecutionStartDateTime', '').strftime('%Y-%m-%d %H:%M:%S UTC') if response.get('ExecutionStartDateTime') else None,
-            "execution_end_time": response.get('ExecutionEndDateTime', '').strftime('%Y-%m-%d %H:%M:%S UTC') if response.get('ExecutionEndDateTime') else None,
-        }
-        
-        return json.dumps(result, indent=2, ensure_ascii=False)
-        
-    except Exception as e:
-        return f"❌ Failed to get logs for command {command_id}: {str(e)}"
 
 
 @mcp.tool()
