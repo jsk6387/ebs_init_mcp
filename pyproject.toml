@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ebs-initializer-mcp"
-version = "0.4.9"
+version = "0.7.9"
 description = "MCP server for AWS EBS volume initialization"
 authors = [
     {name = "sangkyuu", email = "jsk6387@naver.com"},
@@ -31,11 +31,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/jsk6387/ebs_init_mcp"
 Repository = "https://github.com/jsk6387/ebs_init_mcp"
-Documentation = "https://github.com/jsk6387/ebs_init_mcp#readme"
 "Bug Reports" = "https://github.com/jsk6387/ebs_init_mcp/issues"
-"Source Code" = "https://github.com/jsk6387/ebs_init_mcp"
 
 [project.optional-dependencies]
 dev = [

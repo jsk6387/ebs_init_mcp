@@ -6,7 +6,10 @@ A Model Context Protocol (MCP) server for automating AWS EBS volume initializati
 
 - 🔍 **Volume Discovery**: Automatically discover all EBS volumes attached to an EC2 instance
 - 🚀 **Automated Initialization**: Initialize volumes using `fio` (recommended) or `dd`
-- 📊 **Progress Monitoring**: Check initialization status and view detailed logs
+- ⏱️ **Smart Time Estimation**: Predict completion time with parallel processing simulation
+- 📊 **Real-time Progress Tracking**: Visual progress bars with accurate percentage and remaining time
+- ❌ **Cancellation Support**: Cancel ongoing initialization with complete process cleanup
+- 🤖 **AI Agent Optimized**: Flat JSON structure for better AI agent compatibility
 - 🌐 **Multi-Region Support**: Works across all AWS regions
 - 🔒 **Secure Execution**: Uses AWS Systems Manager for secure remote execution
 
@@ -19,7 +22,7 @@ A Model Context Protocol (MCP) server for automating AWS EBS volume initializati
 uvx ebs-initializer-mcp@latest
 
 # Or run specific version
-uvx ebs-initializer-mcp==0.4.5
+uvx ebs-initializer-mcp==0.6.7
 
 # Install globally
 uv tool install ebs-initializer-mcp
@@ -57,9 +60,10 @@ Add to your MCP configuration (`mcp_config.json`):
 ### Available Tools
 
 1. **get_instance_volumes**: Get all EBS volumes attached to an instance
-2. **initialize_all_volumes**: Initialize all volumes on an instance (parallel processing)
+2. **initialize_all_volumes**: Initialize all volumes on an instance (parallel processing with time estimation)
 3. **initialize_volume_by_id**: Initialize a specific volume by its volume ID
 4. **check_initialization_status**: Monitor initialization progress and view detailed logs
+5. **cancel_initialization**: Cancel ongoing initialization with complete process cleanup
 
 ### Example Usage with Claude Code
 
@@ -67,13 +71,43 @@ Add to your MCP configuration (`mcp_config.json`):
 "Initialize all EBS volumes for instance i-1234567890abcdef0 using fio"
 "Initialize volume vol-1234567890abcdef0 using fio"
 "Check the status of the newly attached volume vol-abcdef1234567890"
+"Cancel the initialization command 12345678-1234-1234-1234-123456789012"
 ```
 
 The MCP server will:
-1. Discover all attached EBS volumes
+1. Discover all attached EBS volumes and calculate estimated completion time
 2. Install fio on the target instance
-3. Run initialization commands in parallel
-4. Provide status updates and logs
+3. Run initialization commands in parallel with real-time throughput optimization
+4. Provide **real-time progress tracking** with visual progress bars and accurate percentages
+5. Return **AI agent-optimized flat JSON structure** for better compatibility
+6. Allow cancellation with complete process cleanup if needed
+
+## Progress Tracking
+
+Version 0.6.7 introduces enhanced progress tracking optimized for AI agents:
+
+### Visual Progress Display
+- **Real-time progress bars**: `[██████████░░░░░░░░░░] 50.0%`
+- **Accurate percentages**: Based on initial time estimation and elapsed time
+- **Remaining time calculation**: Precise estimates of completion time
+
+### AI Agent Optimization
+- **Flat JSON structure**: Progress information at top-level fields for easy access
+- **Priority field ordering**: Most important progress data comes first
+- **Simple message format**: `"🔄 50.0% Complete..."`
+
+### Response Structure
+```json
+{
+  "command_id": "...",
+  "status": "InProgress",
+  "execution_start_time": "2025-09-10 01:18:21.418000+00:00",
+  "progress_percentage": 50.0,
+  "progress_bar": "[██████████░░░░░░░░░░] 50.0%",
+  "estimated_remaining_minutes": 5.2,
+  "message": "🔄 50.0% Complete..."
+}
+```
 
 ## Prerequisites
 
