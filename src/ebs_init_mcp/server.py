@@ -247,6 +247,20 @@ def check_initialization_status(command_id: str, region: str = DEFAULT_REGION) -
     # Get timing information
     start_time = invocation.get('RequestedDateTime')
     
+    # Try to get end time from various sources
+    end_time = response.get('EndDateTime') or invocation.get('EndDateTime')
+    
+    # If not found, check CommandPlugins
+    if not end_time and 'CommandPlugins' in invocation:
+        plugins = invocation['CommandPlugins']
+        if plugins and len(plugins) > 0:
+            end_time = plugins[0].get('ResponseFinishDateTime')
+    
+    # Debug: confirm end time extraction
+    logger.info(f"Debug - Start time: {start_time}")
+    logger.info(f"Debug - End time: {end_time}")
+    logger.info(f"Debug - Response status: {response.get('Status')}")
+    
     # Parse estimation data from command comment
     comment = invocation.get('Comment', '') or ""
     estimation_data = parse_estimation_from_comment(comment)
@@ -262,7 +276,8 @@ def check_initialization_status(command_id: str, region: str = DEFAULT_REGION) -
     
     # Format and return text response
     execution_start_time = str(start_time) if start_time else "Unknown"
-    return format_text_response(response['Status'], progress_info, instance_id, execution_start_time)
+    execution_end_time = str(end_time) if end_time else None
+    return format_text_response(response['Status'], progress_info, instance_id, execution_start_time, execution_end_time)
 
 
 @mcp.tool()

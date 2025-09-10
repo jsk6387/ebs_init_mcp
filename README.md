@@ -10,7 +10,7 @@ A Model Context Protocol (MCP) server for automating AWS EBS volume initializati
 - 📊 **Real-time Progress Tracking**: Visual progress bars with accurate percentage and remaining time
 - ❌ **Cancellation Support**: Cancel ongoing initialization with complete process cleanup
 - 🤖 **AI Agent Optimized**: Text-based responses optimized for AI agent compatibility
-- 🌐 **Multi-Region Support**: Works across all AWS regions including t2 instance type support
+- 🌐 **Multi-Region Support**: Works across all AWS regions
 - 🔒 **Secure Execution**: Uses AWS Systems Manager for secure remote execution
 - 🏗️ **Modular Architecture**: Clean, maintainable codebase with separated concerns
 
@@ -189,7 +189,7 @@ The codebase is organized into focused modules for maintainability and reusabili
 src/ebs_init_mcp/
 ├── server.py           # MCP server and tool definitions (430 lines)
 ├── aws_clients.py      # AWS client caching and management
-├── throughput.py       # EBS throughput calculation with t2→t3 mapping
+├── throughput.py       # EBS throughput calculation
 ├── estimation.py       # Time estimation algorithms
 ├── initialization.py   # Command generation for volume initialization
 ├── status.py          # Status checking and progress calculation
@@ -203,7 +203,7 @@ src/ebs_init_mcp/
 **Algorithm**: Simulates parallel processing with throughput sharing
 
 ```python
-# Step 1: Get instance EBS throughput (t2 types mapped to t3)
+# Step 1: Get instance EBS throughput
 instance_throughput = get_instance_ebs_throughput(instance_type)
 
 # Step 2: Collect volume data
@@ -262,14 +262,6 @@ estimated_minutes = (size_gb * 1024 MB) / effective_throughput / 60
 - Effective: min(1000, 500) = 500MB/s
 - Time: (100 × 1024) / 500 / 60 = **3.4 minutes**
 
-### Instance Type Support
-
-**t2 Instance Handling**: t2 types don't appear in `describe-instance-types` API, so they're automatically mapped to t3 equivalents:
-- `t2.micro` → `t3.micro`
-- `t2.large` → `t3.large`
-- etc.
-
-This ensures accurate throughput calculation for all instance types.
 
 ## Development
 

@@ -214,7 +214,8 @@ def format_status_message(status: str, progress_info: Optional[Dict[str, Any]] =
 
 
 def format_text_response(status: str, progress_info: Optional[Dict[str, Any]], 
-                        instance_id: str, execution_start_time: str) -> str:
+                        instance_id: str, execution_start_time: str, 
+                        execution_end_time: Optional[str] = None) -> str:
     """
     Format text-based response for AI agent compatibility.
     
@@ -223,6 +224,7 @@ def format_text_response(status: str, progress_info: Optional[Dict[str, Any]],
         progress_info: Progress information
         instance_id: EC2 instance ID  
         execution_start_time: Command start time
+        execution_end_time: Command end time (for completed commands)
         
     Returns:
         Formatted text response
@@ -248,7 +250,36 @@ Started: {execution_start_time}
 Note: Actual initialization time may vary depending on environment. This is for reference only."""
     
     elif status == 'Success':
-        return f"""Status: Completed Successfully ✅
+        if execution_end_time:
+            # Calculate total elapsed time
+            try:
+                start_dt = datetime.fromisoformat(execution_start_time.replace('Z', '+00:00'))
+                end_dt = datetime.fromisoformat(execution_end_time.replace('Z', '+00:00'))
+                total_elapsed = end_dt - start_dt
+                
+                # Format elapsed time nicely
+                total_minutes = int(total_elapsed.total_seconds() / 60)
+                hours = total_minutes // 60
+                minutes = total_minutes % 60
+                
+                if hours > 0:
+                    elapsed_str = f"{hours}h {minutes}m"
+                else:
+                    elapsed_str = f"{minutes}m"
+                
+                return f"""Status: Completed Successfully ✅
+Instance ID: {instance_id}
+Start Time: {execution_start_time}
+End Time: {execution_end_time}
+Total Elapsed: {elapsed_str}"""
+            except Exception as e:
+                logger.warning(f"Error calculating elapsed time: {e}")
+                return f"""Status: Completed Successfully ✅
+Instance ID: {instance_id}
+Start Time: {execution_start_time}
+End Time: {execution_end_time}"""
+        else:
+            return f"""Status: Completed Successfully ✅
 Instance ID: {instance_id}
 Start Time: {execution_start_time}"""
     
