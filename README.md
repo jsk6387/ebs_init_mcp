@@ -6,12 +6,13 @@ A Model Context Protocol (MCP) server for automating AWS EBS volume initializati
 
 - 🔍 **Volume Discovery**: Automatically discover all EBS volumes attached to an EC2 instance
 - 🚀 **Automated Initialization**: Initialize volumes using `fio` (recommended) or `dd`
-- ⏱️ **Smart Time Estimation**: Predict completion time with parallel processing simulation
+- ⏱️ **Smart Time Estimation**: Predict completion time based on volume size and throughput
 - 📊 **Real-time Progress Tracking**: Visual progress bars with accurate percentage and remaining time
 - ❌ **Cancellation Support**: Cancel ongoing initialization with complete process cleanup
-- 🤖 **AI Agent Optimized**: Flat JSON structure for better AI agent compatibility
-- 🌐 **Multi-Region Support**: Works across all AWS regions
+- 🤖 **AI Agent Optimized**: Text-based responses optimized for AI agent compatibility
+- 🌐 **Multi-Region Support**: Works across all AWS regions including t2 instance type support
 - 🔒 **Secure Execution**: Uses AWS Systems Manager for secure remote execution
+- 🏗️ **Modular Architecture**: Clean, maintainable codebase with separated concerns
 
 ## Installation
 
@@ -22,7 +23,7 @@ A Model Context Protocol (MCP) server for automating AWS EBS volume initializati
 uvx ebs-initializer-mcp@latest
 
 # Or run specific version
-uvx ebs-initializer-mcp==0.6.7
+uvx ebs-initializer-mcp==0.7.10
 
 # Install globally
 uv tool install ebs-initializer-mcp
@@ -178,19 +179,116 @@ export AWS_REGION=ap-northeast-2
 }
 ```
 
+## Architecture
+
+### Modular Design
+
+The codebase is organized into focused modules for maintainability and reusability:
+
+```
+src/ebs_init_mcp/
+├── server.py           # MCP server and tool definitions (430 lines)
+├── aws_clients.py      # AWS client caching and management
+├── throughput.py       # EBS throughput calculation with t2→t3 mapping
+├── estimation.py       # Time estimation algorithms
+├── initialization.py   # Command generation for volume initialization
+├── status.py          # Status checking and progress calculation
+└── utils.py           # Utility functions and device mapping scripts
+```
+
+### Time Estimation Logic
+
+#### 1. `initialize_all_volumes` (Parallel Initialization)
+
+**Algorithm**: Simulates parallel processing with throughput sharing
+
+```python
+# Step 1: Get instance EBS throughput (t2 types mapped to t3)
+instance_throughput = get_instance_ebs_throughput(instance_type)
+
+# Step 2: Collect volume data
+volumes = [{'size_gb': size, 'max_throughput_mbps': vol_throughput}...]
+
+# Step 3: AWS EBS throughput allocation algorithm
+while volumes_remaining:
+    total_demand = sum(vol_throughput for each volume)
+    
+    if total_demand <= instance_throughput:
+        # Each volume gets its maximum throughput
+        allocated_throughputs = [vol_max_throughput for each volume]
+    else:
+        # AWS EBS allocation: smaller volumes get priority
+        fair_share = instance_throughput / len(volumes_remaining)
+        
+        # First pass: allocate full throughput to volumes <= fair_share
+        for volume in volumes_remaining:
+            if volume.max_throughput <= fair_share:
+                volume.allocated = volume.max_throughput
+                remaining_throughput -= volume.max_throughput
+        
+        # Second pass: distribute remaining among larger volumes
+        remaining_large_volumes = volumes with throughput > fair_share
+        throughput_per_large = remaining_throughput / len(remaining_large_volumes)
+        for volume in remaining_large_volumes:
+            volume.allocated = throughput_per_large
+    
+    # Calculate completion times and process next step
+    completion_times = [(size * 1024) / allocated_throughput / 60 for each volume]
+```
+
+**Example**: t3.large (500MB/s) with 3 volumes:
+- Volume 1: 100GB/125MB/s, Volume 2: 100GB/1000MB/s, Volume 3: 100GB/1000MB/s  
+- Total demand: 2125MB/s > 500MB/s (exceeds instance limit)
+- Allocation: Vol1=125MB/s, Vol2=187.5MB/s, Vol3=187.5MB/s
+- Result: Vol2&3 finish at 9.1min, Vol1 continues alone → 13.7min total
+
+#### 2. `initialize_volume_by_id` (Single Volume)
+
+**Algorithm**: Simple throughput-limited calculation
+
+```python
+# Step 1: Get throughput constraints
+instance_throughput = get_instance_ebs_throughput(instance_type)
+volume_throughput = volume.get('Throughput', 1000)
+
+# Step 2: Calculate effective throughput (bottleneck)
+effective_throughput = min(volume_throughput, instance_throughput)
+
+# Step 3: Linear time calculation
+estimated_minutes = (size_gb * 1024 MB) / effective_throughput / 60
+```
+
+**Example**: 100GB volume, t3.large (500MB/s), gp3 (1000MB/s)
+- Effective: min(1000, 500) = 500MB/s
+- Time: (100 × 1024) / 500 / 60 = **3.4 minutes**
+
+### Instance Type Support
+
+**t2 Instance Handling**: t2 types don't appear in `describe-instance-types` API, so they're automatically mapped to t3 equivalents:
+- `t2.micro` → `t3.micro`
+- `t2.large` → `t3.large`
+- etc.
+
+This ensures accurate throughput calculation for all instance types.
+
 ## Development
 
 ```bash
 git clone <repository>
 cd ebs-init-mcp
-pip install -e ".[dev]"
+
+# Install dependencies
+uv sync
+
+# Run development server
+AWS_REGION=ap-northeast-2 uv run mcp dev src/ebs_init_mcp/server.py
 
 # Run tests
-pytest
+uv run pytest
 
 # Format code
-black src/
-ruff check src/
+uv run ruff format src/
+uv run ruff check src/
 ```
 
 ## License
