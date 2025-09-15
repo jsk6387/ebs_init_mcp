@@ -32,17 +32,80 @@ def parse_estimation_from_comment(comment: str) -> Dict[str, Any]:
     
     if not comment:
         return estimation_data
+    
+    # Parse new multi-instance format with base64 encoded JSON: "EBS Init Multi: <base64>"
+    logger.info(f"DEBUG: Trying to parse comment: '{comment}'")
+    multi_b64_match = re.search(r'EBS Init Multi: ([A-Za-z0-9+/=]+)', comment)
+    if multi_b64_match:
+        try:
+            import base64
+            import json as json_module
+            
+            b64_data = multi_b64_match.group(1)
+            logger.info(f"DEBUG: Extracted base64 data: '{b64_data}' (length: {len(b64_data)})")
+            
+            json_str = base64.b64decode(b64_data).decode()
+            logger.info(f"DEBUG: Decoded JSON string: '{json_str}' (length: {len(json_str)})")
+            
+            compact_data = json_module.loads(json_str)
+            logger.info(f"DEBUG: Parsed compact data: {compact_data}")
+            
+            # Convert compact format back to full format
+            estimation_data = {
+                "instances": compact_data.get("i", 0),
+                "volumes": compact_data.get("v", 0), 
+                "total_gb": compact_data.get("g", 0),
+                "method": compact_data.get("m", ""),
+                "is_multi_instance": True,
+                "estimations": {}
+            }
+            
+            # Convert compact estimations back to full format
+            compact_estimations = compact_data.get("e", {})
+            logger.info(f"DEBUG: Processing {len(compact_estimations)} compact estimations")
+            
+            for inst_id, compact_est in compact_estimations.items():
+                estimation_data["estimations"][inst_id] = {
+                    "estimated_minutes": compact_est.get("est", 0),
+                    "volume_count": compact_est.get("vol", 0),
+                    "total_gb": compact_est.get("gb", 0),
+                    "instance_type": compact_est.get("type", "Unknown")
+                }
+                logger.info(f"DEBUG: Converted estimation for {inst_id}: {estimation_data['estimations'][inst_id]}")
+            
+            logger.info(f"DEBUG: Final parsed multi-instance base64 estimation data: {estimation_data}")
+            return estimation_data
+        except Exception as e:
+            logger.error(f"DEBUG: Failed to parse base64 estimation data: {e}")
+            logger.error(f"DEBUG: Base64 data was: '{b64_data if 'b64_data' in locals() else 'N/A'}'")
+            # Fall through to try other parsing methods
+    else:
+        logger.info("DEBUG: No base64 multi-instance format match found")
         
-    # Parse comment format: "EBS Init: 3vol 208GB est:14.0m fio"
-    match = re.search(r'(\d+)vol (\d+)GB est:(\d+(?:\.\d+)?)m (\w+)', comment)
-    if match:
+    # Parse legacy comment format: "EBS Init: 2inst 3vol 208GB fio"  
+    multi_match = re.search(r'(\d+)inst (\d+)vol (\d+)GB (\w+)', comment)
+    if multi_match:
         estimation_data = {
-            "volumes_count": int(match.group(1)),
-            "total_gb": int(match.group(2)),
-            "estimated_minutes": float(match.group(3)),
-            "method": match.group(4)
+            "instances_count": int(multi_match.group(1)),
+            "volumes_count": int(multi_match.group(2)),
+            "total_gb": int(multi_match.group(3)),
+            "method": multi_match.group(4),
+            "is_multi_instance": True
         }
-        logger.info(f"Debug - Parsed estimation data: {estimation_data}")
+        logger.info(f"Debug - Parsed legacy multi-instance estimation data: {estimation_data}")
+        return estimation_data
+        
+    # Parse single instance format: "EBS Init: 3vol 208GB est:14.0m fio"
+    single_match = re.search(r'(\d+)vol (\d+)GB est:(\d+(?:\.\d+)?)m (\w+)', comment)
+    if single_match:
+        estimation_data = {
+            "volumes_count": int(single_match.group(1)),
+            "total_gb": int(single_match.group(2)),
+            "estimated_minutes": float(single_match.group(3)),
+            "method": single_match.group(4),
+            "is_multi_instance": False
+        }
+        logger.info(f"Debug - Parsed single instance estimation data: {estimation_data}")
     else:
         logger.warning(f"Debug - Comment regex did not match: '{comment}'")
     
@@ -144,7 +207,7 @@ def calculate_progress_info(elapsed_minutes: float, estimation_data: Dict[str, A
 
 def get_command_status(command_id: str, region: str = DEFAULT_REGION) -> Tuple[Dict[str, Any], Optional[str]]:
     """
-    Get command status and details from SSM.
+    Get command status and details from SSM for all instances.
     
     Args:
         command_id: SSM command ID
@@ -156,7 +219,7 @@ def get_command_status(command_id: str, region: str = DEFAULT_REGION) -> Tuple[D
     try:
         ssm = get_ssm_client(region)
         
-        # First get command details to find the instance ID
+        # Get command details for all instances
         command_invocations = ssm.list_command_invocations(
             CommandId=command_id,
             Details=True
@@ -165,19 +228,25 @@ def get_command_status(command_id: str, region: str = DEFAULT_REGION) -> Tuple[D
         if not command_invocations['CommandInvocations']:
             return {}, f"❌ No command invocations found for command {command_id}"
         
-        # Get the first (and usually only) invocation
-        invocation = command_invocations['CommandInvocations'][0]
-        instance_id = invocation['InstanceId']
-        
-        response = ssm.get_command_invocation(
-            CommandId=command_id,
-            InstanceId=instance_id
-        )
+        # Get detailed response for all invocations
+        invocations_data = []
+        for invocation in command_invocations['CommandInvocations']:
+            instance_id = invocation['InstanceId']
+            
+            response = ssm.get_command_invocation(
+                CommandId=command_id,
+                InstanceId=instance_id
+            )
+            
+            invocations_data.append({
+                'response': response,
+                'invocation': invocation,
+                'instance_id': instance_id
+            })
         
         return {
-            'response': response,
-            'invocation': invocation,
-            'instance_id': instance_id
+            'invocations': invocations_data,
+            'command_id': command_id
         }, None
         
     except Exception as e:

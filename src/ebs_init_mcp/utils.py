@@ -141,12 +141,36 @@ def create_volume_summary(volume_info: dict) -> dict:
     snapshot_id = volume_info.get('SnapshotId', '')
     needs_init = bool(snapshot_id)
     
+    # Get volume throughput (for gp3, io1, io2) - defaults to 1000 if not specified
+    throughput = volume_info.get('Throughput')
+    
+    # For gp3 volumes, throughput is explicitly set
+    # For gp2, io1, io2, throughput is calculated based on size/IOPS
+    if throughput is None:
+        volume_type = volume_info['VolumeType']
+        size_gb = volume_info['Size']
+        iops = volume_info.get('Iops', 100)
+        
+        if volume_type == 'gp2':
+            # gp2: 3 IOPS per GB, max 16000 IOPS, throughput = IOPS * 0.25
+            effective_iops = min(max(100, size_gb * 3), 16000)
+            throughput = int(effective_iops * 0.25)
+        elif volume_type in ['io1', 'io2']:
+            # io1/io2: throughput = IOPS * 0.25, max varies by type
+            max_throughput = 1000 if volume_type == 'io1' else 4000
+            throughput = min(int(iops * 0.25), max_throughput)
+        else:
+            # Default for other volume types
+            throughput = 1000
+
     return {
         'volume_id': volume_info['VolumeId'],
         'device': attachment.get('Device', 'Unknown'),
         'size_gb': volume_info['Size'],
         'volume_type': volume_info['VolumeType'],
         'iops': volume_info.get('Iops', 'N/A'),
+        'throughput': throughput,  # Add throughput information
+        'max_throughput_mbps': throughput,  # For estimation compatibility
         'encrypted': volume_info['Encrypted'],
         'state': attachment.get('State', 'Unknown'),
         'attach_time': attachment.get('AttachTime').isoformat() if attachment.get('AttachTime') else None,

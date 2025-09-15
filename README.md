@@ -6,8 +6,9 @@ A Model Context Protocol (MCP) server for automating AWS EBS volume initializati
 
 - 🔍 **Volume Discovery**: Automatically discover all EBS volumes attached to an EC2 instance
 - 🚀 **Automated Initialization**: Initialize volumes using `fio` (recommended) or `dd`
-- ⏱️ **Smart Time Estimation**: Predict completion time based on volume size and throughput
-- 📊 **Real-time Progress Tracking**: Visual progress bars with accurate percentage and remaining time
+- 🏢 **Multi-Instance Support**: Initialize volumes across multiple instances in parallel with single SSM command
+- ⏱️ **Smart Time Estimation**: Predict completion time based on volume size and throughput with parallel processing simulation
+- 📊 **Real-time Progress Tracking**: Visual progress bars with accurate percentage and remaining time per instance
 - ❌ **Cancellation Support**: Cancel ongoing initialization with complete process cleanup
 - 🤖 **AI Agent Optimized**: Text-based responses optimized for AI agent compatibility
 - 🌐 **Multi-Region Support**: Works across all AWS regions
@@ -61,43 +62,61 @@ Add to your MCP configuration (`mcp_config.json`):
 ### Available Tools
 
 1. **get_instance_volumes**: Get all EBS volumes attached to an instance
-2. **initialize_all_volumes**: Initialize all volumes on an instance (parallel processing with time estimation)
+2. **initialize_all_volumes**: Initialize all volumes on one or multiple instances (supports comma-separated instance IDs with single SSM command execution)
 3. **initialize_volume_by_id**: Initialize a specific volume by its volume ID
-4. **check_initialization_status**: Monitor initialization progress and view detailed logs
+4. **check_initialization_status**: Monitor initialization progress and view detailed logs with per-instance estimation data
 5. **cancel_initialization**: Cancel ongoing initialization with complete process cleanup
 
 ### Example Usage with Claude Code
 
 ```
+# Single instance
 "Initialize all EBS volumes for instance i-1234567890abcdef0 using fio"
+
+# Multiple instances (comma-separated)
+"Initialize all EBS volumes for instances i-1234567890abcdef0,i-0987654321fedcba0 using fio"
+
+# Specific volume
 "Initialize volume vol-1234567890abcdef0 using fio"
-"Check the status of the newly attached volume vol-abcdef1234567890"
+
+# Check status
+"Check the status of the initialization command 12345678-1234-1234-1234-123456789012"
+
+# Cancel operation
 "Cancel the initialization command 12345678-1234-1234-1234-123456789012"
 ```
 
 The MCP server will:
-1. Discover all attached EBS volumes and calculate estimated completion time
-2. Install fio on the target instance
-3. Run initialization commands in parallel with real-time throughput optimization
-4. Provide **real-time progress tracking** with visual progress bars and accurate percentages
-5. Return **AI agent-optimized flat JSON structure** for better compatibility
-6. Allow cancellation with complete process cleanup if needed
+1. Discover all attached EBS volumes and calculate estimated completion time per instance
+2. Install fio on the target instance(s)
+3. Execute single SSM command across multiple instances with IMDS-based volume filtering
+4. Run initialization commands in parallel with real-time throughput optimization
+5. Provide **real-time progress tracking** with visual progress bars and per-instance estimations
+6. Return **AI agent-optimized flat JSON structure** with instance-specific data
+7. Allow cancellation with complete process cleanup if needed
 
 ## Progress Tracking
 
-Version 0.6.7 introduces enhanced progress tracking optimized for AI agents:
+Enhanced progress tracking optimized for AI agents with multi-instance support:
 
 ### Visual Progress Display
 - **Real-time progress bars**: `[██████████░░░░░░░░░░] 50.0%`
+- **Per-instance tracking**: Individual progress for each instance
 - **Accurate percentages**: Based on initial time estimation and elapsed time
 - **Remaining time calculation**: Precise estimates of completion time
+
+### Multi-Instance Support
+- **Instance-specific estimations**: Each instance gets its own time prediction
+- **Parallel execution time**: Shows maximum time across all instances (not sum)
+- **IMDS volume filtering**: Each instance only processes its own volumes
+- **Parameter Store integration**: Stores estimation data for multi-instance commands
 
 ### AI Agent Optimization
 - **Flat JSON structure**: Progress information at top-level fields for easy access
 - **Priority field ordering**: Most important progress data comes first
-- **Simple message format**: `"🔄 50.0% Complete..."`
+- **Instance breakdown**: Detailed per-instance estimation data
 
-### Response Structure
+### Single Instance Response Structure
 ```json
 {
   "command_id": "...",
@@ -107,6 +126,31 @@ Version 0.6.7 introduces enhanced progress tracking optimized for AI agents:
   "progress_bar": "[██████████░░░░░░░░░░] 50.0%",
   "estimated_remaining_minutes": 5.2,
   "message": "🔄 50.0% Complete..."
+}
+```
+
+### Multi-Instance Response Structure
+```json
+{
+  "status": "initialization_started",
+  "command_id": "4044d07e-c10c-4caf-b5b7-eee8435ac1c7",
+  "target_instances": ["i-0fe60964746c77041", "i-0a824284f8c887f4a"],
+  "total_instances": 2,
+  "instance_estimations": {
+    "i-0fe60964746c77041": {
+      "estimated_minutes": 1.09,
+      "volume_count": 1,
+      "total_gb": 8,
+      "instance_type": "t3.xlarge"
+    },
+    "i-0a824284f8c887f4a": {
+      "estimated_minutes": 6.89,
+      "volume_count": 3,
+      "total_gb": 208,
+      "instance_type": "m5.4xlarge"
+    }
+  },
+  "total_estimated_minutes": 6.89
 }
 ```
 
@@ -122,8 +166,12 @@ Version 0.6.7 introduces enhanced progress tracking optimized for AI agents:
   - SUSE Linux Enterprise Server (SLES)
 - Required IAM permissions:
   - `ec2:DescribeVolumes`
+  - `ec2:DescribeInstances`
   - `ssm:SendCommand`
   - `ssm:GetCommandInvocation`
+  - `ssm:PutParameter`
+  - `ssm:GetParameter`
+  - `ssm:DeleteParameter`
 
 ## AWS IAM Permissions
 
@@ -135,8 +183,12 @@ Version 0.6.7 introduces enhanced progress tracking optimized for AI agents:
             "Effect": "Allow",
             "Action": [
                 "ec2:DescribeVolumes",
+                "ec2:DescribeInstances",
                 "ssm:SendCommand",
-                "ssm:GetCommandInvocation"
+                "ssm:GetCommandInvocation",
+                "ssm:PutParameter",
+                "ssm:GetParameter",
+                "ssm:DeleteParameter"
             ],
             "Resource": "*"
         }
